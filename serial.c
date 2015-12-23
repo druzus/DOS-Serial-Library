@@ -530,17 +530,18 @@ static int serial_dpmi_lock_memory(void)
                 g_isr_addr.pm_offset = FP_ADDR(com_general_isr);
                 g_isr_addr.pm_selector = _go32_my_cs();
                 if(_go32_dpmi_allocate_iret_wrapper(&g_isr_addr) == 0)
-                    return 1;
+                    return SER_SUCCESS;
                 __dpmi_unlock_linear_region(&dataregion);
             }
             __dpmi_unlock_linear_region(&coderegion);
         }
     }
-    return 0;
+    return SER_ERR_LOCK_MEM;
 }
 
-static void serial_dpmi_unlock_memory(void)
+static int serial_dpmi_unlock_memory(void)
 {
+    int rc = SER_SUCCESS;
     unsigned long baseaddr;
     __dpmi_meminfo region;
 
@@ -549,16 +550,24 @@ static void serial_dpmi_unlock_memory(void)
         region.handle = 0;
         region.size = sizeof(g_comports);
         region.address = baseaddr + FP_ADDR(g_comports);
-        __dpmi_unlock_linear_region(&region);
+        if(__dpmi_unlock_linear_region(&region) != 0)
+            rc = SER_ERR_LOCK_MEM;
     }
+    else
+        rc = SER_ERR_LOCK_MEM;
     if(__dpmi_get_segment_base_address(_my_cs(), &baseaddr) == 0)
     {
         region.handle = 0;
         region.size = ISR_SIZE;
         region.address = baseaddr + FP_ADDR(com_general_isr);
-        __dpmi_unlock_linear_region(&region);
+        if(__dpmi_unlock_linear_region(&region) != 0)
+            rc = SER_ERR_LOCK_MEM;
     }
-    _go32_dpmi_free_iret_wrapper(&g_isr_addr);
+    else
+        rc = SER_ERR_LOCK_MEM;
+    if(_go32_dpmi_free_iret_wrapper(&g_isr_addr) != 0)
+        rc = SER_ERR_LOCK_MEM;
+    return rc;
 }
 
 #else /* ! __DJGPP__ */
@@ -615,13 +624,13 @@ static int serial_dpmi_lock_linear_memory(void Far *ptr, unsigned long size)
         if(r.w.cflag == 0)
         {
             g_isr_addr = com_general_isr;
-            return 1;
+            return SER_SUCCESS;
         }
     }
-    return 0;
+    return SER_ERR_LOCK_MEM;
 }
 
-static void serial_dpmi_unlock_linear_memory(void Far *ptr, unsigned long size)
+static int serial_dpmi_unlock_linear_memory(void Far *ptr, unsigned long size)
 {
     union REGS r;
 
@@ -640,25 +649,30 @@ static void serial_dpmi_unlock_linear_memory(void Far *ptr, unsigned long size)
         r.x.esi = size >> 16;
         r.x.edi = size & 0xFFFF;
         int386(0x31, &r, &r);
+        if(r.w.cflag == 0)
+            return SER_SUCCESS;
     }
-    int386 (0x31, &r, &r);
+    return SER_ERR_LOCK_MEM;
 }
 
 static int serial_dpmi_lock_memory(void)
 {
-    if(serial_dpmi_lock_linear_memory(com_general_isr, ISR_SIZE))
+    int rc;
+
+    if((rc=serial_dpmi_lock_linear_memory(com_general_isr, ISR_SIZE)) == SER_SUCCESS)
     {
-        if(serial_dpmi_lock_linear_memory(g_comports, sizeof(g_comports)))
-            return 1;
-        serial_dpmi_unlock_linear_memory(com_general_isr, ISR_SIZE);
+        if((rc=serial_dpmi_lock_linear_memory(g_comports, sizeof(g_comports))) != SER_SUCCESS)
+            serial_dpmi_unlock_linear_memory(com_general_isr, ISR_SIZE);
     }
-    return 0;
+    return rc;
 }
 
-static void serial_dpmi_unlock_memory(void)
+static int serial_dpmi_unlock_memory(void)
 {
-    serial_dpmi_unlock_linear_memory(com_general_isr, ISR_SIZE);
-    serial_dpmi_unlock_linear_memory(g_comports, sizeof(g_comports));
+    int rc1 = serial_dpmi_unlock_linear_memory(com_general_isr, ISR_SIZE),
+        rc2 = serial_dpmi_unlock_linear_memory(g_comports, sizeof(g_comports));
+
+    return rc1 != SER_SUCCESS ? rc1 : rc2;
 }
 
 #endif /* ! __DJGPP__ */
@@ -670,11 +684,13 @@ static int serial_install_irqhandler(int irq)
     {
         if( g_isrs_count++ == 0 )
         {
+            int rc;
+
             /* lock memory used by interrupt handler in DPMI mode */
-            if(!serial_dpmi_lock_memory())
+            if((rc=serial_dpmi_lock_memory()) != SER_SUCCESS)
             {
                 --g_isrs_count;
-                return SER_ERR_LOCK_MEM;
+                return rc;
             }
         }
         serial_dpmi_get_pvect(irq+INTERRUPT_VECTOR_OFFSET, &g_old_isrs[irq]);
@@ -684,17 +700,22 @@ static int serial_install_irqhandler(int irq)
     return SER_SUCCESS;
 }
 
-static void serial_remove_irqhandler(int irq)
+static int serial_remove_irqhandler(int irq)
 {
+    int rc = SER_SUCCESS;
+
     if(g_isrs_taken[irq])
     {
         serial_dpmi_set_pvect(irq+INTERRUPT_VECTOR_OFFSET, &g_old_isrs[irq]);
         g_isrs_taken[irq] = 0;
 
         if( --g_isrs_count == 0 )
+        {
             /* unlock memory used by interrupt handler in DPMI mode */
-            serial_dpmi_unlock_memory();
+            rc = serial_dpmi_unlock_memory();
+        }
     }
+    return rc;
 }
 
 #else /* ! PROTECTED_MODE */
@@ -711,10 +732,12 @@ static int serial_install_irqhandler(int irq)
     return SER_SUCCESS;
 }
 
-static void serial_remove_irqhandler(int irq)
+static int serial_remove_irqhandler(int irq)
 {
     _dos_setvect(irq+INTERRUPT_VECTOR_OFFSET, g_old_isrs[irq]);
     g_isrs_taken[irq] = 0;
+
+    return SER_SUCCESS;
 }
 
 #endif /* ! PROTECTED_MODE */
@@ -797,7 +820,7 @@ static int serial_find_irq(int comport)
     return SER_ERR_IRQ_NOT_FOUND;
 }
 
-static void serial_free_irq(int comport)
+static int serial_free_irq(int comport)
 {
     serial_struct* com = (serial_struct*)(g_comports + comport);
     serial_struct* com_min = (serial_struct*)(g_comports);
@@ -806,7 +829,7 @@ static void serial_free_irq(int comport)
     serial_struct* ptr;
 
     if(irq == IRQ_NONE)
-        return;
+        return SER_SUCCESS;
 
     CPU_DISABLE_INTERRUPTS();
 
@@ -845,11 +868,12 @@ static void serial_free_irq(int comport)
 
     for(ptr=com_min;ptr<=com_max;ptr++)
         if(ptr != com && ptr->irq == irq)
-            return;
+            return SER_SUCCESS;
 
     /* Disable interrupts from the PIC and restore the old vector */
     PIC_DISABLE_IRQ(irq);
-    serial_remove_irqhandler(irq);
+
+    return serial_remove_irqhandler(irq);
 }
 
 
@@ -916,13 +940,15 @@ int serial_open(int comport, long bps, int data_bits, char parity, int stop_bits
 int serial_close(int comport)
 {
     serial_struct* com = (serial_struct*)(g_comports + comport);
+    int rc;
+
     if(comport < COM_MIN || comport > COM_MAX)
         return SER_ERR_INVALID_COMPORT;
     if(!com->open)
         return SER_ERR_NOT_OPEN;
 
     /* Restore old interrupts */
-    serial_free_irq(comport);
+    rc = serial_free_irq(comport);
 
     /* Turn everything off */
     UART_WRITE_INTERRUPT_ENABLE(com, 0);
@@ -931,7 +957,7 @@ int serial_close(int comport)
 
     com->open = 0;
 
-    return SER_SUCCESS;
+    return rc;
 }
 
 int serial_read(int comport, char* data, int len)
