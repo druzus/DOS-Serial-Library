@@ -9,24 +9,24 @@
 #define Interrupt
 #define Far
 #define Farpeekw(s, o)              _farpeekw((s),(o))
-#define _Outp(a,b)                  (outp(a,b),(b))
-#define _Outpw(a,w)                 (outpw(a,w),(w))
+#define Outp(a,b)                   (outp(a,b),(b))
+#define Outpw(a,w)                  (outpw(a,w),(w))
 #define CPU_DISABLE_INTERRUPTS()    asm("CLI")
 #define CPU_ENABLE_INTERRUPTS()     asm("STI")
 #elif defined( _MSC_VER ) || defined( __WATCOMC__ )
 #define Interrupt                   __interrupt
 #define Far                         __far
 #define Farpeekw(s, o)              (*((unsigned short Far*)(MK_FP((s), (o)))))
-#define _Outp(a,b)                  outp(a,b)
-#define _Outpw(a,w)                 outpw(a,w)
+#define Outp(a,b)                   outp(a,b)
+#define Outpw(a,w)                  outpw(a,w)
 #define CPU_DISABLE_INTERRUPTS()    __asm CLI
 #define CPU_ENABLE_INTERRUPTS()     __asm STI
 #else /* __BORLANDC__ */
 #define Interrupt                   interrupt
 #define Far                         far
 #define Farpeekw(s, o)              (*((unsigned short Far*)(MK_FP((s), (o)))))
-#define _Outp(a,b)                  outp(a,b)
-#define _Outpw(a,w)                 outpw(a,w)
+#define Outp(a,b)                   outp(a,b)
+#define Outpw(a,w)                  outpw(a,w)
 #define CPU_DISABLE_INTERRUPTS()    asm CLI
 #define CPU_ENABLE_INTERRUPTS()     asm STI
 #endif /* _MSC_VER */
@@ -163,19 +163,19 @@ static unsigned char PIC_READ_IRR(unsigned int port){PIC_WRITE_OCW3(port, PIC_RR
 #define UART_READ_MODEM_CONTROL(C)  inp((C)->base+UART_MODEM_CONTROL)
 #define UART_READ_LINE_STATUS(C)    ((C)->lsr = inp((C)->base+UART_LINE_STATUS))
 #define UART_READ_MODEM_STATUS(C)   ((C)->msr = inp((C)->base+UART_MODEM_STATUS))
-#define UART_READ_BPS(C)            ((_Outp((C)->base+UART_LINE_CONTROL, inp((C)->base+UART_LINE_CONTROL) | UART_LCR_DIVISOR_LATCH) & 0) |   \
+#define UART_READ_BPS(C)            ((Outp((C)->base+UART_LINE_CONTROL, inp((C)->base+UART_LINE_CONTROL) | UART_LCR_DIVISOR_LATCH) & 0) |   \
                                     inpw((C)->base+UART_DIVISOR_LATCH_WORD)                                                     |   \
-                                    (_Outp((C)->base+UART_LINE_CONTROL, inp((C)->base+UART_LINE_CONTROL) & ~UART_LCR_DIVISOR_LATCH) & 0))
+                                    (Outp((C)->base+UART_LINE_CONTROL, inp((C)->base+UART_LINE_CONTROL) & ~UART_LCR_DIVISOR_LATCH) & 0))
 
 
 /* UART Write Commands (B = UART Base Address <int>, D = Data <char>) */
 #define UART_WRITE_DATA(C, D)       outp((C)->base+UART_TX_BUFFER, D)
-#define UART_WRITE_INTERRUPT_ENABLE(C, D) ((C)->ier = _Outp((C)->base+UART_INTERRUPT_ENABLE, D))
-#define UART_WRITE_FIFO_CONTROL(C, D)   ((C)->fcr = _Outp((C)->base+UART_FIFO_CONTROL, D))
-#define UART_WRITE_LINE_CONTROL(C, D)   ((C)->lcr = _Outp((C)->base+UART_LINE_CONTROL, D))
-#define UART_WRITE_MODEM_CONTROL(C, D)  ((C)->mcr = _Outp((C)->base+UART_MODEM_CONTROL, D))
+#define UART_WRITE_INTERRUPT_ENABLE(C, D) ((C)->ier = Outp((C)->base+UART_INTERRUPT_ENABLE, D))
+#define UART_WRITE_FIFO_CONTROL(C, D)   ((C)->fcr = Outp((C)->base+UART_FIFO_CONTROL, D))
+#define UART_WRITE_LINE_CONTROL(C, D)   ((C)->lcr = Outp((C)->base+UART_LINE_CONTROL, D))
+#define UART_WRITE_MODEM_CONTROL(C, D)  ((C)->mcr = Outp((C)->base+UART_MODEM_CONTROL, D))
 #define UART_WRITE_BPS(C, D)        {outp((C)->base+UART_LINE_CONTROL, inp((C)->base+UART_LINE_CONTROL) | UART_LCR_DIVISOR_LATCH);  \
-                                     (C)->dlatch = _Outpw((C)->base+UART_DIVISOR_LATCH_WORD, D);                                     \
+                                     (C)->dlatch = Outpw((C)->base+UART_DIVISOR_LATCH_WORD, D);                                     \
                                      outp((C)->base+UART_LINE_CONTROL, inp((C)->base+UART_LINE_CONTROL) & ~UART_LCR_DIVISOR_LATCH);}
 
 
