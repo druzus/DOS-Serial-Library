@@ -13,6 +13,7 @@
 #define Outpw(a,w)                  (outpw(a,w),(w))
 #define CPU_DISABLE_INTERRUPTS()    asm("CLI")
 #define CPU_ENABLE_INTERRUPTS()     asm("STI")
+#define FP_ADDR(p)                  ((unsigned long)(p))
 #elif defined( _MSC_VER ) || defined( __WATCOMC__ )
 #define Interrupt                   __interrupt
 #define Far                         __far
@@ -518,15 +519,15 @@ static int serial_dpmi_lock_memory(void)
     {
         coderegion.handle = 0;
         coderegion.size = ISR_SIZE;
-        coderegion.address = codeaddr + (unsigned long)com_general_isr;
+        coderegion.address = codeaddr + FP_ADDR(com_general_isr);
         dataregion.handle = 0;
         dataregion.size = sizeof(g_comports);
-        dataregion.address = codeaddr + (unsigned long)g_comports;
+        dataregion.address = codeaddr + FP_ADDR(g_comports);
         if(__dpmi_lock_linear_region(&coderegion) == 0)
         {
             if(__dpmi_lock_linear_region(&dataregion) == 0)
             {
-                g_isr_addr.pm_offset = (unsigned long)com_general_isr;
+                g_isr_addr.pm_offset = FP_ADDR(com_general_isr);
                 g_isr_addr.pm_selector = _go32_my_cs();
                 if(_go32_dpmi_allocate_iret_wrapper(&g_isr_addr) == 0)
                     return 1;
@@ -547,14 +548,14 @@ static void serial_dpmi_unlock_memory(void)
     {
         region.handle = 0;
         region.size = sizeof(g_comports);
-        region.address = baseaddr + (unsigned long)g_comports;
+        region.address = baseaddr + FP_ADDR(g_comports);
         __dpmi_unlock_linear_region(&region);
     }
     if(__dpmi_get_segment_base_address(_my_cs(), &baseaddr) == 0)
     {
         region.handle = 0;
         region.size = ISR_SIZE;
-        region.address = baseaddr + (unsigned long)com_general_isr;
+        region.address = baseaddr + FP_ADDR(com_general_isr);
         __dpmi_unlock_linear_region(&region);
     }
     _go32_dpmi_free_iret_wrapper(&g_isr_addr);
