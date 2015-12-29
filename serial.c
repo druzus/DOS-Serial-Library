@@ -551,22 +551,22 @@ static int serial_dpmi_unlock_memory(void)
         region.size = sizeof(g_comports);
         region.address = baseaddr + FP_ADDR(g_comports);
         if(__dpmi_unlock_linear_region(&region) != 0)
-            rc = SER_ERR_LOCK_MEM;
+            rc = SER_ERR_UNLOCK_MEM;
     }
     else
-        rc = SER_ERR_LOCK_MEM;
+        rc = SER_ERR_UNLOCK_MEM;
     if(__dpmi_get_segment_base_address(_my_cs(), &baseaddr) == 0)
     {
         region.handle = 0;
         region.size = ISR_SIZE;
         region.address = baseaddr + FP_ADDR(com_general_isr);
         if(__dpmi_unlock_linear_region(&region) != 0)
-            rc = SER_ERR_LOCK_MEM;
+            rc = SER_ERR_UNLOCK_MEM;
     }
     else
-        rc = SER_ERR_LOCK_MEM;
+        rc = SER_ERR_UNLOCK_MEM;
     if(_go32_dpmi_free_iret_wrapper(&g_isr_addr) != 0)
-        rc = SER_ERR_LOCK_MEM;
+        rc = SER_ERR_UNLOCK_MEM;
     return rc;
 }
 
@@ -652,7 +652,7 @@ static int serial_dpmi_unlock_linear_memory(void Far *ptr, unsigned long size)
         if(r.w.cflag == 0)
             return SER_SUCCESS;
     }
-    return SER_ERR_LOCK_MEM;
+    return SER_ERR_UNLOCK_MEM;
 }
 
 static int serial_dpmi_lock_memory(void)
