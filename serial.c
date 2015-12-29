@@ -429,7 +429,9 @@ static void Interrupt com_general_isr(void)
                                         case SER_HANDSHAKING_NONE:
                                             break;
                                         case SER_HANDSHAKING_XONXOFF:
-                                            UART_WRITE_DATA(com, SER_XOFF);
+                                            /* Wait until tx hold register is empty */
+                                            while(!(UART_READ_LINE_STATUS(com) & UART_LSR_TX_HOLD_EMPTY))
+                                            {}
                                             break;
                                         case SER_HANDSHAKING_DTRDSR:
                                             UART_WRITE_MODEM_CONTROL(com, UART_READ_MODEM_CONTROL(com) & ~UART_MCR_DTR);
@@ -756,7 +758,8 @@ static int serial_find_irq(int comport)
     UART_WRITE_FIFO_CONTROL(com, 0);
 
     /* Wait until tx hold register is empty */
-    while((UART_READ_LINE_STATUS(com) & UART_LSR_TX_HOLD_EMPTY) == 0);
+    while((UART_READ_LINE_STATUS(com) & UART_LSR_TX_HOLD_EMPTY) == 0)
+    {}
 
     CPU_DISABLE_INTERRUPTS();
 
@@ -982,7 +985,12 @@ int serial_read(int comport, char* data, int len)
     {
         com->rx_flow_on = 1;
         if(com->flow_mode == SER_HANDSHAKING_XONXOFF)
+        {
+            /* Wait until tx hold register is empty */
+            while(!(UART_READ_LINE_STATUS(com) & UART_LSR_TX_HOLD_EMPTY))
+            {}
             UART_WRITE_DATA(com, SER_XON);
+        }
         else if(com->flow_mode == SER_HANDSHAKING_RTSCTS)
             UART_WRITE_MODEM_CONTROL(com, UART_READ_MODEM_CONTROL(com) | UART_MCR_RTS);
         else if(com->flow_mode == SER_HANDSHAKING_DTRDSR)
